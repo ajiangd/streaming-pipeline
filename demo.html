@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Demo — HLS Stream via AWS S3 + CloudFront</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%2300f0ff'/><circle cx='50' cy='50' r='20' fill='%2303050a'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="shared.css">
+  <style>
+    /* Index-page specific overrides on top of shared.css */
+    :root {
+      --accent: var(--cyan);
+      --accent2: var(--violet);
+      --success: var(--green);
+      --warning: var(--orange);
+      --danger: var(--pink);
+      --muted: var(--text3);
+      --sans: 'Syne', sans-serif;
+    }
+
+    header {
+      position: relative;
+      z-index: 3;
+      padding: 88px 64px 40px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 24px;
+    }
+
+    .header-left h1 {
+      font-family: var(--mono);
+      font-size: 1.4rem;
+      font-weight: 600;
+      color: var(--cyan);
+      letter-spacing: 0.04em;
+      margin-bottom: 8px;
+    }
+
+    .header-left p {
+      font-family: var(--mono);
+      color: var(--text3);
+      font-size: 0.78rem;
+      font-weight: 300;
+      letter-spacing: 0.04em;
+    }
+
+    .header-badge {
+      font-family: var(--mono);
+      font-size: 0.62rem;
+      color: var(--cyan);
+      border: 1px solid rgba(0,240,255,0.3);
+      padding: 6px 12px;
+      border-radius: 2px;
+      opacity: 0.7;
+      white-space: nowrap;
+      letter-spacing: 0.08em;
+    }
+
+    main {
+      position: relative;
+      z-index: 3;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 48px 64px;
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+    }
+
+    /* Player section */
+    .player-section {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .player-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .player-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .player-title {
+      font-family: var(--mono);
+      font-size: 0.62rem;
+      color: var(--text3);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    #quality-badge {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 2px;
+      background: var(--cyan);
+      color: var(--bg);
+      transition: background 0.3s, color 0.3s;
+      min-width: 60px;
+      text-align: center;
+      letter-spacing: 0.06em;
+    }
+
+    #quality-badge.q-360 { background: var(--pink); color: #fff; }
+    #quality-badge.q-720 { background: var(--orange); color: var(--bg); }
+    #quality-badge.q-1080 { background: var(--green); color: var(--bg); }
+    #quality-badge.q-idle { background: var(--text3); color: #fff; }
+
+    video {
+      width: 100%;
+      display: block;
+      background: #000;
+      max-height: 380px;
+    }
+
+    /* Stats panel */
+    .stats-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 0.62rem;
+      color: var(--text3);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .stats-grid {
+      padding: 16px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .stat-item {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      padding: 12px;
+    }
+
+    .stat-label {
+      font-family: var(--mono);
+      font-size: 0.58rem;
+      color: var(--text3);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 6px;
+    }
+
+    .stat-value {
+      font-family: var(--mono);
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--cyan);
+    }
+
+    .stat-value.good { color: var(--green); }
+    .stat-value.warn { color: var(--orange); }
+    .stat-value.bad { color: var(--pink); }
+
+    /* Throttle */
+    .throttle-wrap {
+      padding: 14px 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    .throttle-label {
+      font-family: var(--mono);
+      font-size: 0.58rem;
+      color: var(--text3);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 10px;
+    }
+
+    .throttle-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+
+    .throttle-btn {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      padding: 5px 10px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text3);
+      border-radius: 2px;
+      cursor: none;
+      transition: all 0.15s;
+      letter-spacing: 0.06em;
+    }
+    .throttle-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+    .throttle-btn.active { background: var(--cyan); color: var(--bg); border-color: var(--cyan); }
+
+    /* Segment log */
+    .segment-log {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .log-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .log-title {
+      font-family: var(--mono);
+      font-size: 0.62rem;
+      color: var(--text3);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .log-count {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      color: var(--violet);
+    }
+
+    #segment-feed {
+      height: 220px;
+      overflow-y: auto;
+      font-family: var(--mono);
+      font-size: 0.7rem;
+    }
+
+    #segment-feed::-webkit-scrollbar { width: 3px; }
+    #segment-feed::-webkit-scrollbar-track { background: transparent; }
+    #segment-feed::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .log-entry {
+      display: grid;
+      grid-template-columns: 54px 1fr auto auto;
+      gap: 12px;
+      align-items: center;
+      padding: 5px 16px;
+      border-bottom: 1px solid rgba(26,32,53,0.5);
+      animation: fadeIn 0.2s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateX(-8px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    .log-time { color: var(--text3); font-size: 0.62rem; }
+    .log-file { color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .log-rendition {
+      font-size: 0.62rem;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 2px;
+      white-space: nowrap;
+      letter-spacing: 0.06em;
+    }
+
+    .r-1080 { background: rgba(0,255,179,0.12); color: var(--green); }
+    .r-720 { background: rgba(255,140,66,0.12); color: var(--orange); }
+    .r-360 { background: rgba(255,77,141,0.12); color: var(--pink); }
+    .r-manifest { background: rgba(157,111,255,0.12); color: var(--violet); }
+
+    .log-size { color: var(--text3); font-size: 0.62rem; white-space: nowrap; }
+
+    .log-empty {
+      padding: 40px 16px;
+      text-align: center;
+      color: var(--text3);
+      font-size: 0.72rem;
+      font-family: var(--mono);
+    }
+
+    /* Info cards */
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    .info-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      padding: 24px;
+      transition: border-color 0.2s;
+    }
+    .info-card:hover { border-color: var(--border2); }
+
+    .info-card h2 {
+      font-family: var(--mono);
+      font-size: 0.62rem;
+      font-weight: 600;
+      color: var(--cyan);
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      margin-bottom: 12px;
+    }
+
+    .info-card p {
+      font-family: var(--mono);
+      color: var(--text2);
+      font-size: 0.78rem;
+      line-height: 1.85;
+      font-weight: 300;
+    }
+
+    footer {
+      position: relative;
+      z-index: 3;
+      text-align: center;
+      padding: 32px;
+      border-top: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 0.62rem;
+      color: var(--text3);
+      letter-spacing: 0.08em;
+    }
+
+    @media (max-width: 900px) {
+      header, main { padding: 24px; padding-top: 80px; }
+      .player-section { grid-template-columns: 1fr; }
+      .info-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="cursor" id="cursor"></div>
+<div class="cursor-ring" id="cursor-ring"></div>
+
+<nav>
+  <a class="nav-brand" href="index.html"><span class="blink"></span>STREAMING / PIPELINE</a>
+  <a class="nav-link" href="index.html">HOME</a>
+  <a class="nav-link" href="abr.html">ABR</a>
+  <a class="nav-link" href="hls.html">HLS</a>
+  <a class="nav-link" href="dash.html">DASH</a>
+  <a class="nav-link" href="cmaf.html">CMAF</a>
+  <a class="nav-link active" href="demo.html">DEMO</a>
+</nav>
+
+<header>
+  <div class="header-left">
+    <h1>STREAMING / PIPELINE</h1>
+    <p>HLS · DASH · CMAF — built on AWS S3 + CloudFront · a learning project</p>
+  </div>
+  <div class="header-badge">S3 + CLOUDFRONT + MEDIACONVERT</div>
+</header>
+
+<main>
+
+  <!-- Player + Stats -->
+  <div class="player-section">
+
+    <div class="player-wrap">
+      <div class="player-header">
+        <span class="player-title">Live Demo — HLS via CloudFront</span>
+        <span id="quality-badge" class="q-idle">IDLE</span>
+      </div>
+      <video id="video" controls></video>
+    </div>
+
+    <div class="stats-panel">
+      <div class="panel-header">Live Stats</div>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <div class="stat-label">Bitrate</div>
+          <div class="stat-value" id="stat-bitrate">—</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Resolution</div>
+          <div class="stat-value" id="stat-res">—</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Buffer</div>
+          <div class="stat-value" id="stat-buffer">—</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Dropped</div>
+          <div class="stat-value" id="stat-dropped">—</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Segments</div>
+          <div class="stat-value" id="stat-segs">0</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Bandwidth</div>
+          <div class="stat-value" id="stat-bw">—</div>
+        </div>
+      </div>
+
+      <div class="throttle-wrap">
+        <div class="throttle-label">Simulate network conditions</div>
+        <div class="throttle-btns">
+          <button class="throttle-btn active" data-level="auto">Auto ABR</button>
+          <button class="throttle-btn" data-level="full">Full</button>
+          <button class="throttle-btn" data-level="mid">Mid</button>
+          <button class="throttle-btn" data-level="low">Low</button>
+        </div>
+        <div style="margin-top:8px; font-family:var(--mono); font-size:0.62rem; color:var(--muted);" id="throttle-note">
+          ABR automatically picks the best quality for your connection.
+        </div>
+        <div style="margin-top:6px; font-family:var(--mono); font-size:0.62rem; color:var(--muted); opacity:0.6;">
+          Allow up to 6 seconds for quality changes to take effect.
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Segment log -->
+  <div class="segment-log">
+    <div class="log-header">
+      <span class="log-title">Segment Request Log</span>
+      <span class="log-count" id="log-count">0 requests</span>
+    </div>
+    <div id="segment-feed">
+      <div class="log-empty">Play the video to see segment requests appear here in real time.</div>
+    </div>
+  </div>
+
+</main>
+
+<footer>BUILT WITH AWS S3 · CLOUDFRONT · MEDIACONVERT · HLS.JS — PIPELINE LEARNING PROJECT</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<script>
+  const video = document.getElementById('video');
+  const videoSrc = 'https://d14tpktysc56ha.cloudfront.net/hls/hummingbirds.m3u8';
+  const qualityBadge = document.getElementById('quality-badge');
+  const feed = document.getElementById('segment-feed');
+  const logCount = document.getElementById('log-count');
+
+  let segCount = 0;
+  let droppedFrames = 0;
+  let hls;
+
+  // Stats updater
+  function updateStats() {
+    if (!hls) return;
+    const level = hls.levels && hls.currentLevel >= 0 ? hls.levels[hls.currentLevel] : null;
+    const bw = hls.bandwidthEstimate;
+
+    document.getElementById('stat-bitrate').textContent = level ? Math.round(level.bitrate / 1000) + ' kbps' : '—';
+    document.getElementById('stat-res').textContent = level ? level.width + '×' + level.height : '—';
+    document.getElementById('stat-bw').textContent = bw ? Math.round(bw / 1000) + ' kbps' : '—';
+    document.getElementById('stat-segs').textContent = segCount;
+
+    // Buffer
+    if (video.buffered.length > 0) {
+      const buf = (video.buffered.end(video.buffered.length - 1) - video.currentTime).toFixed(1);
+      const bufEl = document.getElementById('stat-buffer');
+      bufEl.textContent = buf + 's';
+      bufEl.className = 'stat-value ' + (buf > 10 ? 'good' : buf > 3 ? 'warn' : 'bad');
+    }
+
+    // Dropped frames
+    if (video.getVideoPlaybackQuality) {
+      const q = video.getVideoPlaybackQuality();
+      droppedFrames = q.droppedVideoFrames;
+      const dropEl = document.getElementById('stat-dropped');
+      dropEl.textContent = droppedFrames;
+      dropEl.className = 'stat-value ' + (droppedFrames === 0 ? 'good' : droppedFrames < 5 ? 'warn' : 'bad');
+    }
+  }
+
+  setInterval(updateStats, 1000);
+
+  // Quality badge updater
+  function updateQualityBadge(level) {
+    if (!hls || !hls.levels || hls.currentLevel < 0) return;
+    const h = hls.levels[hls.currentLevel].height;
+    qualityBadge.className = '';
+    if (h >= 1080) { qualityBadge.textContent = '1080p'; qualityBadge.className = 'q-1080'; }
+    else if (h >= 720) { qualityBadge.textContent = '720p'; qualityBadge.className = 'q-720'; }
+    else { qualityBadge.textContent = '360p'; qualityBadge.className = 'q-360'; }
+  }
+
+  // Log a segment request
+  function logSegment(url, bytes, isManifest, levelHeight) {
+    const wasEmpty = feed.querySelector('.log-empty');
+    if (wasEmpty) feed.innerHTML = '';
+
+    segCount++;
+    logCount.textContent = segCount + ' requests';
+
+    const filename = url.split('/').pop().split('?')[0];
+    const now = new Date();
+    const time = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    let renditionClass = 'r-manifest';
+    let renditionLabel = 'manifest';
+    if (!isManifest) {
+      // Use actual level height from HLS.js rather than filename matching
+      if (levelHeight >= 1080) { renditionClass = 'r-1080'; renditionLabel = '1080p'; }
+      else if (levelHeight >= 720) { renditionClass = 'r-720'; renditionLabel = '720p'; }
+      else { renditionClass = 'r-360'; renditionLabel = '360p'; }
+    }
+
+    const sizeStr = bytes ? (bytes > 1024 * 1024 ? (bytes / 1024 / 1024).toFixed(1) + ' MB' : Math.round(bytes / 1024) + ' KB') : '—';
+
+    const entry = document.createElement('div');
+    entry.className = 'log-entry';
+    entry.innerHTML = `
+      <span class="log-time">${time}</span>
+      <span class="log-file">${filename}</span>
+      <span class="log-rendition ${renditionClass}">${renditionLabel}</span>
+      <span class="log-size">${sizeStr}</span>
+    `;
+    feed.insertBefore(entry, feed.firstChild);
+
+    // Keep log trimmed to 60 entries
+    while (feed.children.length > 60) feed.removeChild(feed.lastChild);
+  }
+
+  document.querySelectorAll('.throttle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.throttle-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const level = btn.dataset.level;
+      const note = document.getElementById('throttle-note');
+      if (hls && hls.levels && hls.levels.length > 0) {
+        // Find level index by exact height match
+        const findIndex = (targetHeight) => {
+          let bestIdx = 0;
+          let bestDiff = Infinity;
+          hls.levels.forEach((l, i) => {
+            const diff = Math.abs(l.height - targetHeight);
+            if (diff < bestDiff) { bestDiff = diff; bestIdx = i; }
+          });
+          return bestIdx;
+        };
+        if (level === 'auto') {
+          hls.autoLevelCapping = -1;
+          hls.currentLevel = -1; // full ABR control
+        } else if (level === 'low') {
+          const idx = findIndex(360);
+          hls.autoLevelCapping = idx;
+          hls.nextLevel = idx; // switch at next segment, no buffer flush
+        } else if (level === 'mid') {
+          const idx = findIndex(720);
+          hls.autoLevelCapping = idx;
+          hls.nextLevel = idx;
+        } else {
+          hls.autoLevelCapping = -1;
+          hls.nextLevel = findIndex(1080);
+        }
+      }
+      note.textContent = level === 'auto'
+        ? 'ABR automatically picks the best quality for your connection.'
+        : level === 'full'
+        ? 'Uncapped — ABR will climb to 1080p within a few segments.'
+        : level === 'mid'
+        ? 'Capped at 720p — ABR will switch down gradually, no buffer flush.'
+        : 'Capped at 360p — ABR will switch down gradually, no buffer flush.';
+    });
+  });
+
+  // Init HLS
+  if (Hls.isSupported()) {
+    hls = new Hls({
+      enableWorker: true,
+      maxBufferLength: 12,        // only buffer 12 seconds ahead (2 segments)
+      maxMaxBufferLength: 12,     // hard cap regardless of network speed
+      maxBufferSize: 0,           // disable size-based buffer cap, use time only
+    });
+    hls.loadSource(videoSrc);
+    hls.attachMedia(video);
+
+    hls.on(Hls.Events.MANIFEST_PARSED, (e, data) => {
+      logSegment(videoSrc, null, true);
+      qualityBadge.textContent = 'LOADING';
+      qualityBadge.className = '';
+    });
+
+    hls.on(Hls.Events.LEVEL_SWITCHED, (e, data) => {
+      updateQualityBadge(data.level);
+    });
+
+    // Log immediately when segment request starts (not after download completes)
+    hls.on(Hls.Events.FRAG_LOADING, (e, data) => {
+      const url = data.frag.url;
+      const levelIndex = data.frag.level;
+      const levelHeight = hls.levels && levelIndex >= 0 ? hls.levels[levelIndex].height : 0;
+      logSegment(url, null, false, levelHeight);
+      updateQualityBadge(levelIndex);
+    });
+
+  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    // Native HLS (Safari)
+    video.src = videoSrc;
+    qualityBadge.textContent = 'NATIVE';
+  }
+</script>
+
+<script>
+const cursorEl = document.getElementById('cursor');
+const ringEl = document.getElementById('cursor-ring');
+if (cursorEl) {
+  document.addEventListener('mousemove', e => {
+    cursorEl.style.left = e.clientX + 'px';
+    cursorEl.style.top = e.clientY + 'px';
+    setTimeout(() => { ringEl.style.left = e.clientX + 'px'; ringEl.style.top = e.clientY + 'px'; }, 60);
+  });
+}
+</script>
+
+</body>
+</html>

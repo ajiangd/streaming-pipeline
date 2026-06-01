@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Streaming Pipeline — How Video Gets to Your Screen</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%2300f0ff'/><circle cx='50' cy='50' r='20' fill='%2303050a'/></svg>">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #03050a; --surface: #080c16; --surface2: #0d1220;
+      --border: #151d30; --border2: #1e2840;
+      --cyan: #00f0ff; --violet: #9d6fff; --green: #00ffb3;
+      --orange: #ff8c42; --pink: #ff4d8d;
+      --text: #e8edf8; --text2: #a8b4cc; --text3: #5a6480;
+      --mono: 'JetBrains Mono', monospace;
+      --display: 'Syne', sans-serif;
+    }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: var(--display);
+      background: var(--bg);
+      color: var(--text);
+      overflow-x: hidden;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+      height: 56px; display: flex; align-items: stretch; padding: 0 48px;
+      background: rgba(3,5,10,0); backdrop-filter: blur(0px);
+      border-bottom: 1px solid transparent;
+      transition: background 0.4s, backdrop-filter 0.4s, border-color 0.4s;
+    }
+    nav.scrolled {
+      background: rgba(3,5,10,0.92);
+      backdrop-filter: blur(24px);
+      border-bottom-color: var(--border);
+    }
+    .nav-brand {
+      font-family: var(--mono); font-size: 0.72rem; font-weight: 600;
+      color: var(--cyan); display: flex; align-items: center; gap: 8px;
+      padding-right: 28px; border-right: 1px solid var(--border);
+      margin-right: 8px; text-decoration: none; letter-spacing: 0.05em; white-space: nowrap;
+    }
+    .dot {
+      width: 6px; height: 6px; border-radius: 50%; background: var(--cyan);
+      animation: blink 1.4s ease-in-out infinite; box-shadow: 0 0 8px var(--cyan);
+      flex-shrink: 0;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.15} }
+    .nav-link {
+      font-family: var(--mono); font-size: 0.65rem; color: var(--text3);
+      text-decoration: none; display: flex; align-items: center; padding: 0 14px;
+      transition: color 0.2s; letter-spacing: 0.08em;
+      border-bottom: 2px solid transparent; white-space: nowrap;
+    }
+    .nav-link:hover { color: var(--text); }
+    .nav-link.active { color: var(--cyan); border-bottom-color: var(--cyan); }
+
+    /* ── HERO ── */
+    .hero {
+      position: relative; min-height: 100vh;
+      display: flex; flex-direction: column; justify-content: center;
+      padding: 120px 80px 80px; overflow: hidden;
+    }
+
+    /* Parallax layers */
+    .parallax-bg {
+      position: absolute; inset: 0; pointer-events: none; z-index: 0;
+    }
+    .orb {
+      position: absolute; border-radius: 50%;
+      filter: blur(100px); will-change: transform;
+    }
+    .orb-1 { width: 700px; height: 700px; background: var(--cyan); opacity: 0.05; top: -200px; right: -150px; }
+    .orb-2 { width: 500px; height: 500px; background: var(--violet); opacity: 0.06; bottom: -100px; left: -100px; }
+    .orb-3 { width: 300px; height: 300px; background: var(--green); opacity: 0.04; top: 40%; right: 20%; }
+
+    /* Grid */
+    .hero-grid {
+      position: absolute; inset: 0; pointer-events: none; z-index: 0;
+      background-image:
+        linear-gradient(rgba(0,240,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,240,255,0.03) 1px, transparent 1px);
+      background-size: 60px 60px;
+      mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 20%, transparent 100%);
+    }
+
+    .hero-content { position: relative; z-index: 1; max-width: 900px; }
+
+    .hero-eyebrow {
+      font-family: var(--mono); font-size: 0.65rem; letter-spacing: 0.2em;
+      text-transform: uppercase; color: var(--cyan); margin-bottom: 28px;
+      display: flex; align-items: center; gap: 12px;
+      opacity: 0; animation: fadeUp 0.8s ease 0.2s forwards;
+    }
+    .hero-eyebrow::before { content: ''; width: 32px; height: 1px; background: var(--cyan); }
+
+    .hero h1 {
+      font-size: clamp(3.5rem, 10vw, 8rem);
+      font-weight: 800; line-height: 0.9; letter-spacing: -0.04em;
+      margin-bottom: 36px;
+      opacity: 0; animation: fadeUp 0.8s ease 0.35s forwards;
+    }
+    .hero h1 .outline {
+      display: block;
+      -webkit-text-stroke: 1.5px var(--cyan);
+      color: transparent;
+    }
+    .hero h1 .outline-v {
+      display: block;
+      -webkit-text-stroke: 1.5px var(--violet);
+      color: transparent;
+    }
+
+    .hero-desc {
+      font-family: var(--mono); font-size: 0.9rem; color: var(--text2);
+      max-width: 520px; line-height: 1.9; font-weight: 300; margin-bottom: 48px;
+      opacity: 0; animation: fadeUp 0.8s ease 0.5s forwards;
+    }
+
+    .hero-actions {
+      display: flex; gap: 12px; flex-wrap: wrap;
+      opacity: 0; animation: fadeUp 0.8s ease 0.65s forwards;
+    }
+    .btn-primary {
+      font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.1em;
+      text-transform: uppercase; text-decoration: none;
+      background: var(--cyan); color: var(--bg);
+      padding: 14px 28px; border-radius: 2px; font-weight: 600;
+      transition: background 0.2s, transform 0.2s;
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .btn-primary:hover { background: #00d4e6; transform: translateY(-2px); }
+    .btn-secondary {
+      font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.1em;
+      text-transform: uppercase; text-decoration: none;
+      border: 1px solid var(--border2); color: var(--text2);
+      padding: 14px 28px; border-radius: 2px;
+      transition: border-color 0.2s, color 0.2s, transform 0.2s;
+    }
+    .btn-secondary:hover { border-color: var(--cyan); color: var(--text); transform: translateY(-2px); }
+
+    /* Scroll indicator */
+    .scroll-hint {
+      position: absolute; bottom: 40px; left: 80px; z-index: 1;
+      display: flex; align-items: center; gap: 12px;
+      font-family: var(--mono); font-size: 0.6rem; color: var(--text3);
+      letter-spacing: 0.12em; text-transform: uppercase;
+      opacity: 0; animation: fadeUp 0.8s ease 1s forwards;
+    }
+    .scroll-line {
+      width: 1px; height: 48px; background: linear-gradient(180deg, var(--text3), transparent);
+      animation: scrollPulse 2s ease-in-out infinite;
+    }
+    @keyframes scrollPulse { 0%,100%{opacity:0.4;transform:scaleY(1)} 50%{opacity:1;transform:scaleY(1.2)} }
+
+    /* Stat strip */
+    .stat-strip {
+      position: relative; z-index: 1;
+      border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+      display: flex;
+      opacity: 0; animation: fadeUp 0.8s ease 0.8s forwards;
+      margin: 0 80px;
+    }
+    .stat-item {
+      flex: 1; padding: 28px 0;
+      border-right: 1px solid var(--border);
+      text-align: center;
+    }
+    .stat-item:last-child { border-right: none; }
+    .stat-val {
+      font-size: 2rem; font-weight: 800; letter-spacing: -0.03em;
+      color: var(--cyan); line-height: 1; margin-bottom: 6px;
+    }
+    .stat-lbl {
+      font-family: var(--mono); font-size: 0.58rem; color: var(--text3);
+      text-transform: uppercase; letter-spacing: 0.14em;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(24px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── SECTIONS ── */
+    section {
+      position: relative; padding: 120px 80px;
+      border-bottom: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .section-inner { position: relative; z-index: 1; max-width: 1080px; margin: 0 auto; }
+
+    .section-eyebrow {
+      font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.2em;
+      text-transform: uppercase; color: var(--text3); margin-bottom: 16px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .section-eyebrow::after { content: ''; flex: 1; height: 1px; background: var(--border); max-width: 80px; }
+
+    .section-title {
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      font-weight: 800; letter-spacing: -0.03em;
+      line-height: 1; margin-bottom: 24px;
+    }
+
+    .section-desc {
+      font-family: var(--mono); font-size: 0.85rem; color: var(--text2);
+      max-width: 580px; line-height: 1.9; font-weight: 300; margin-bottom: 64px;
+    }
+
+    /* ── PROBLEM SECTION ── */
+    .problem-grid {
+      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px;
+      background: var(--border); border: 1px solid var(--border);
+      border-radius: 4px; overflow: hidden;
+    }
+    .problem-card {
+      background: var(--surface); padding: 36px;
+      transition: background 0.2s;
+    }
+    .problem-card:hover { background: var(--surface2); }
+    .problem-num {
+      font-family: var(--mono); font-size: 3rem; font-weight: 800;
+      letter-spacing: -0.04em; color: var(--border2);
+      line-height: 1; margin-bottom: 20px;
+      transition: color 0.3s;
+    }
+    .problem-card:hover .problem-num { color: var(--text3); }
+    .problem-card h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 12px; }
+    .problem-card p {
+      font-family: var(--mono); font-size: 0.76rem; color: var(--text2);
+      line-height: 1.85; font-weight: 300;
+    }
+
+    /* ── HOW IT WORKS ── */
+    .pipeline {
+      display: flex; flex-direction: column; gap: 0;
+      border: 1px solid var(--border); border-radius: 4px; overflow: hidden;
+    }
+    .pipeline-step {
+      display: grid; grid-template-columns: 80px 1fr 200px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      transition: background 0.2s;
+    }
+    .pipeline-step:last-child { border-bottom: none; }
+    .pipeline-step:hover { background: var(--surface2); }
+    .pipeline-num {
+      font-family: var(--mono); font-size: 0.58rem; color: var(--text3);
+      letter-spacing: 0.1em; padding: 28px 20px;
+      border-right: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      writing-mode: vertical-rl;
+    }
+    .pipeline-body { padding: 28px 32px; }
+    .pipeline-title { font-size: 1rem; font-weight: 700; margin-bottom: 6px; }
+    .pipeline-desc { font-family: var(--mono); font-size: 0.74rem; color: var(--text2); line-height: 1.8; font-weight: 300; }
+    .pipeline-tag {
+      padding: 28px 24px; border-left: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: flex-end;
+    }
+    .tag {
+      font-family: var(--mono); font-size: 0.62rem; font-weight: 600;
+      padding: 4px 10px; border-radius: 2px; letter-spacing: 0.06em;
+    }
+    .tag-cyan { background: rgba(0,240,255,0.1); color: var(--cyan); }
+    .tag-orange { background: rgba(255,140,66,0.1); color: var(--orange); }
+    .tag-green { background: rgba(0,255,179,0.1); color: var(--green); }
+    .tag-violet { background: rgba(157,111,255,0.1); color: var(--violet); }
+    .tag-pink { background: rgba(255,77,141,0.1); color: var(--pink); }
+
+    /* ── PROTOCOLS ── */
+    .protocols-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    .proto-card {
+      border: 1px solid var(--border); border-radius: 4px;
+      padding: 36px 32px; text-decoration: none;
+      display: flex; flex-direction: column;
+      transition: border-color 0.25s, transform 0.25s, background 0.25s;
+      position: relative; overflow: hidden; background: var(--surface);
+      min-height: 280px;
+    }
+    .proto-card::after {
+      content: ''; position: absolute; inset: 0;
+      background: radial-gradient(ellipse 80% 80% at 50% 120%, var(--card-color, var(--cyan)), transparent);
+      opacity: 0; transition: opacity 0.4s;
+    }
+    .proto-card:hover { transform: translateY(-6px); }
+    .proto-card:hover::after { opacity: 0.06; }
+    .proto-card:hover { border-color: var(--card-color, var(--cyan)); }
+    .proto-num {
+      font-family: var(--mono); font-size: 0.58rem; color: var(--text3);
+      letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 16px;
+    }
+    .proto-name {
+      font-size: 3rem; font-weight: 800; letter-spacing: -0.04em;
+      color: var(--card-color, var(--cyan)); line-height: 1; margin-bottom: 16px;
+    }
+    .proto-full {
+      font-family: var(--mono); font-size: 0.65rem; color: var(--text3);
+      letter-spacing: 0.06em; margin-bottom: 20px;
+    }
+    .proto-desc {
+      font-family: var(--mono); font-size: 0.76rem; color: var(--text2);
+      line-height: 1.85; font-weight: 300; flex: 1;
+    }
+    .proto-link {
+      font-family: var(--mono); font-size: 0.65rem; color: var(--text3);
+      margin-top: 24px; letter-spacing: 0.08em;
+      transition: color 0.2s, letter-spacing 0.2s;
+    }
+    .proto-card:hover .proto-link { color: var(--card-color, var(--cyan)); letter-spacing: 0.14em; }
+
+    /* ── DEMO CTA ── */
+    .cta-section {
+      padding: 120px 80px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      text-align: center; position: relative; overflow: hidden;
+    }
+    .cta-glow {
+      position: absolute; width: 600px; height: 600px; border-radius: 50%;
+      background: var(--cyan); filter: blur(150px); opacity: 0.04;
+      top: 50%; left: 50%; transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    .cta-section .section-eyebrow { justify-content: center; }
+    .cta-section .section-eyebrow::after { display: none; }
+    .cta-section .section-title { margin: 0 auto 24px; }
+    .cta-section .section-desc { margin: 0 auto 48px; text-align: center; }
+
+    /* ── REVEAL ANIMATIONS ── */
+    .reveal {
+      opacity: 0; transform: translateY(32px);
+      transition: opacity 0.7s ease, transform 0.7s ease;
+    }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+    .reveal-delay-1 { transition-delay: 0.1s; }
+    .reveal-delay-2 { transition-delay: 0.2s; }
+    .reveal-delay-3 { transition-delay: 0.3s; }
+
+    /* Parallax elements */
+    .parallax-el { will-change: transform; }
+
+    /* ── FOOTER ── */
+    footer {
+      padding: 40px 80px; display: flex;
+      justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: 16px;
+    }
+    .foot-text { font-family: var(--mono); font-size: 0.6rem; color: var(--text3); letter-spacing: 0.08em; }
+    .foot-links { display: flex; gap: 24px; }
+    .foot-links a { font-family: var(--mono); font-size: 0.6rem; color: var(--text3); text-decoration: none; transition: color 0.2s; letter-spacing: 0.06em; }
+    .foot-links a:hover { color: var(--text); }
+
+    @media (max-width: 900px) {
+      nav { padding: 0 20px; }
+      .hero { padding: 100px 24px 60px; }
+      .stat-strip { margin: 0 24px; flex-wrap: wrap; }
+      .stat-item { flex: 1 1 50%; }
+      section { padding: 80px 24px; }
+      .problem-grid { grid-template-columns: 1fr; }
+      .pipeline-step { grid-template-columns: 48px 1fr; }
+      .pipeline-tag { display: none; }
+      .protocols-grid { grid-template-columns: 1fr; }
+      .cta-section { padding: 80px 24px; }
+      footer { padding: 32px 24px; }
+    }
+  </style>
+</head>
+<body>
+
+<nav id="nav">
+  <a class="nav-brand" href="index.html"><span class="dot"></span>STREAMING / PIPELINE</a>
+  <a class="nav-link active" href="index.html">HOME</a>
+  <a class="nav-link" href="abr.html">ABR</a>
+  <a class="nav-link" href="hls.html">HLS</a>
+  <a class="nav-link" href="dash.html">DASH</a>
+  <a class="nav-link" href="cmaf.html">CMAF</a>
+  <a class="nav-link" href="demo.html">DEMO</a>
+</nav>
+
+<!-- ── HERO ── -->
+<div class="hero">
+  <div class="parallax-bg">
+    <div class="orb orb-1 parallax-el" data-speed="0.3"></div>
+    <div class="orb orb-2 parallax-el" data-speed="0.2"></div>
+    <div class="orb orb-3 parallax-el" data-speed="0.15"></div>
+  </div>
+  <div class="hero-grid parallax-el" data-speed="0.08"></div>
+
+  <div class="hero-content">
+    <div class="hero-eyebrow">PIPELINE · STREAMING INFRASTRUCTURE · LEARNING PROJECT</div>
+    <h1>
+      How video<br>
+      <span class="outline">gets to</span>
+      <span class="outline-v">your screen.</span>
+    </h1>
+    <p class="hero-desc">A deep dive into the adaptive streaming protocols powering platforms like Netflix and YouTube — HLS, DASH, and CMAF — built on real AWS infrastructure.</p>
+    <div class="hero-actions">
+      <a class="btn-primary" href="#how-it-works">EXPLORE THE PIPELINE ↓</a>
+      <a class="btn-secondary" href="demo.html">LIVE DEMO →</a>
+    </div>
+  </div>
+
+  <div class="scroll-hint">
+    <div class="scroll-line"></div>
+    SCROLL
+  </div>
+</div>
+
+<!-- Stat strip -->
+<div class="stat-strip">
+  <div class="stat-item"><div class="stat-val">~80%</div><div class="stat-lbl">of internet traffic is video</div></div>
+  <div class="stat-item"><div class="stat-val">&lt;3s</div><div class="stat-lbl">LL-HLS target latency</div></div>
+  <div class="stat-item"><div class="stat-val">400+</div><div class="stat-lbl">CloudFront edge locations</div></div>
+  <div class="stat-item"><div class="stat-val">200+</div><div class="stat-lbl">the platform live channels</div></div>
+</div>
+
+<!-- ── THE PROBLEM ── -->
+<section id="problem">
+  <div class="section-inner">
+    <div class="section-eyebrow reveal">01 · THE PROBLEM</div>
+    <h2 class="section-title reveal">Why streaming<br>is hard</h2>
+    <p class="section-desc reveal">Delivering video to millions of simultaneous viewers across wildly different devices and network conditions requires something smarter than a file download.</p>
+    <div class="problem-grid">
+      <div class="problem-card reveal reveal-delay-1">
+        <div class="problem-num">01</div>
+        <h3>Bandwidth is unpredictable</h3>
+        <p>A viewer's connection can swing from 50 Mbps to 2 Mbps in seconds — commutes, crowded stadiums, bad WiFi. A fixed-quality file either buffers or plays in low resolution forever.</p>
+      </div>
+      <div class="problem-card reveal reveal-delay-2">
+        <div class="problem-num">02</div>
+        <h3>Devices are everywhere</h3>
+        <p>The same content needs to work on a 4K TV, a phone on LTE, a laptop on hotel WiFi, and a Roku stick — each with different hardware capabilities and network constraints.</p>
+      </div>
+      <div class="problem-card reveal reveal-delay-3">
+        <div class="problem-num">03</div>
+        <h3>Scale is massive</h3>
+        <p>A popular live event can spike to millions of concurrent viewers in seconds. A single origin server can't handle that — content must be distributed globally before viewers arrive.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── HOW IT WORKS ── -->
+<section id="how-it-works">
+  <div class="section-inner">
+    <div class="section-eyebrow reveal">02 · THE SOLUTION</div>
+    <h2 class="section-title reveal">Adaptive bitrate<br>streaming</h2>
+    <p class="section-desc reveal">Instead of one large video file, the stream is pre-encoded at multiple quality levels and sliced into small segments. The player picks the right quality in real time — switching silently as conditions change.</p>
+    <div class="pipeline reveal">
+      <div class="pipeline-step">
+        <div class="pipeline-num">SOURCE</div>
+        <div class="pipeline-body">
+          <div class="pipeline-title">Raw video input</div>
+          <div class="pipeline-desc">A camera feed, file, or live encoder pushes raw video — often ProRes or H.264 at a very high bitrate — into the encoding pipeline.</div>
+        </div>
+        <div class="pipeline-tag"><span class="tag tag-violet">INPUT</span></div>
+      </div>
+      <div class="pipeline-step">
+        <div class="pipeline-num">ENCODE</div>
+        <div class="pipeline-body">
+          <div class="pipeline-title">Multi-bitrate transcoding</div>
+          <div class="pipeline-desc">AWS MediaConvert transcodes the source into multiple renditions simultaneously — 1080p at 5 Mbps, 720p at 2.5 Mbps, 360p at 800 Kbps — each a complete independent stream.</div>
+        </div>
+        <div class="pipeline-tag"><span class="tag tag-orange">MEDIACONVERT</span></div>
+      </div>
+      <div class="pipeline-step">
+        <div class="pipeline-num">SLICE</div>
+        <div class="pipeline-body">
+          <div class="pipeline-title">Segmentation into chunks</div>
+          <div class="pipeline-desc">Each rendition is split into short segments — typically 6 seconds. Each segment is independently decodable, letting the player switch quality at any segment boundary without buffering.</div>
+        </div>
+        <div class="pipeline-tag"><span class="tag tag-cyan">~6s SEGMENTS</span></div>
+      </div>
+      <div class="pipeline-step">
+        <div class="pipeline-num">MANIFEST</div>
+        <div class="pipeline-body">
+          <div class="pipeline-title">Playlist / manifest generation</div>
+          <div class="pipeline-desc">A manifest file is generated describing all renditions and segment locations. HLS uses .m3u8 playlists. DASH uses XML-based .mpd files. The player reads this first to understand what's available.</div>
+        </div>
+        <div class="pipeline-tag"><span class="tag tag-green">.m3u8 / .mpd</span></div>
+      </div>
+      <div class="pipeline-step">
+        <div class="pipeline-num">ORIGIN</div>
+        <div class="pipeline-body">
+          <div class="pipeline-title">S3 origin storage</div>
+          <div class="pipeline-desc">Segments and manifests are stored in an S3 bucket — the authoritative origin. This project uses a real S3 bucket with static website hosting as its origin server.</div>
+        </div>
+        <div class="pipeline-tag"><span class="tag tag-orange">AWS S3</span></div>
+      </div>
+      <div class="pipeline-step">
+        <div class="pipeline-num">CDN</div>
+        <div class="pipeline-body">
+          <div class="pipeline-title">CloudFront edge caching</div>
+          <div class="pipeline-desc">CloudFront distributes segments to 400+ edge locations globally. Players fetch from the nearest edge node — often milliseconds away. The origin only serves each segment once per region.</div>
+        </div>
+        <div class="pipeline-tag"><span class="tag tag-cyan">CLOUDFRONT</span></div>
+      </div>
+      <div class="pipeline-step">
+        <div class="pipeline-num">PLAYER</div>
+        <div class="pipeline-body">
+          <div class="pipeline-title">HLS.js ABR player</div>
+          <div class="pipeline-desc">HLS.js runs an ABR algorithm in the browser — monitoring bandwidth and buffer health every few seconds, selecting which rendition to fetch next. You can watch this live in the Demo.</div>
+        </div>
+        <div class="pipeline-tag"><span class="tag tag-green">HLS.JS</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── PROTOCOLS ── -->
+<section id="protocols">
+  <div class="section-inner">
+    <div class="section-eyebrow reveal">03 · THE PROTOCOLS</div>
+    <h2 class="section-title reveal">Three ways ABR<br>is delivered</h2>
+    <p class="section-desc reveal">The streaming industry settled on three interlocking standards. Understanding how they relate is core to understanding platforms like these.</p>
+    <div class="protocols-grid">
+
+      <a class="proto-card reveal reveal-delay-2" href="hls.html" style="--card-color:var(--orange)">
+        <div class="proto-num">PROTOCOL_01</div>
+        <div class="proto-name">HLS</div>
+        <div class="proto-full">HTTP Live Streaming</div>
+        <p class="proto-desc">Apple's protocol, required on iOS and Safari. Uses .m3u8 playlists. The most widely deployed streaming protocol on the planet.</p>
+        <div class="proto-link">EXPLORE HLS →</div>
+      </a>
+      <a class="proto-card reveal reveal-delay-1" href="dash.html" style="--card-color:var(--green)">
+        <div class="proto-num">PROTOCOL_02</div>
+        <div class="proto-name">DASH</div>
+        <div class="proto-full">Dynamic Adaptive Streaming over HTTP</div>
+        <p class="proto-desc">The open ISO standard. Codec-agnostic, preferred on Android and Chrome. Uses XML-based MPD manifests. Powers YouTube.</p>
+        <div class="proto-link">EXPLORE DASH →</div>
+      </a>
+      <a class="proto-card reveal reveal-delay-2" href="cmaf.html" style="--card-color:var(--cyan)" style="grid-column: 2 / 3;">
+        <div class="proto-num">PROTOCOL_03</div>
+        <div class="proto-name">CMAF</div>
+        <div class="proto-full">Common Media Application Format</div>
+        <p class="proto-desc">The unifier. One set of fMP4 segments served to both HLS and DASH players. Encode once, reach every device. The industry direction.</p>
+        <div class="proto-link">EXPLORE CMAF →</div>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ── CTA ── -->
+<div class="cta-section">
+  <div class="cta-glow"></div>
+  <div class="section-eyebrow reveal">04 · SEE IT LIVE</div>
+  <h2 class="section-title reveal">Watch the pipeline<br>run in real time.</h2>
+  <p class="section-desc reveal">The Live Demo streams a real HLS video through this exact S3 + CloudFront pipeline. Watch segment requests appear in the log, switch quality levels, and see the ABR algorithm react.</p>
+  <div class="reveal">
+    <a class="btn-primary" href="demo.html">OPEN LIVE DEMO →</a>
+  </div>
+</div>
+
+<footer>
+  <div class="foot-text">BUILT WITH AWS S3 · CLOUDFRONT · MEDIACONVERT · HLS.JS</div>
+  <div class="foot-links">
+    <a href="demo.html">DEMO</a>
+    <a href="abr.html">ABR</a>
+    <a href="hls.html">HLS</a>
+    <a href="dash.html">DASH</a>
+    <a href="cmaf.html">CMAF</a>
+  </div>
+</footer>
+
+<script>
+// ── NAV scroll effect ──
+const nav = document.getElementById('nav');
+window.addEventListener('scroll', () => {
+  nav.classList.toggle('scrolled', window.scrollY > 40);
+}, { passive: true });
+
+// ── Parallax ──
+const parallaxEls = document.querySelectorAll('.parallax-el');
+window.addEventListener('scroll', () => {
+  const scrollY = window.scrollY;
+  parallaxEls.forEach(el => {
+    const speed = parseFloat(el.dataset.speed) || 0.1;
+    el.style.transform = `translateY(${scrollY * speed}px)`;
+  });
+}, { passive: true });
+
+// ── Scroll reveal ──
+const revealObserver = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+    }
+  });
+}, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+
+document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+
+// ── Problem card number parallax on hover ──
+document.querySelectorAll('.problem-card').forEach(card => {
+  card.addEventListener('mousemove', e => {
+    const rect = card.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width - 0.5;
+    const y = (e.clientY - rect.top) / rect.height - 0.5;
+    const num = card.querySelector('.problem-num');
+    num.style.transform = `translate(${x * 8}px, ${y * 8}px)`;
+  });
+  card.addEventListener('mouseleave', () => {
+    card.querySelector('.problem-num').style.transform = '';
+  });
+});
+</script>
+</body>
+</html>

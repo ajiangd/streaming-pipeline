@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DASH — The Open Standard for Adaptive Streaming</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%2300f0ff'/><circle cx='50' cy='50' r='20' fill='%2303050a'/></svg>">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#03050a;--surface:#080c16;--surface2:#0d1220;--border:#151d30;--border2:#1e2840;--cyan:#00f0ff;--violet:#9d6fff;--green:#00ffb3;--orange:#ff8c42;--pink:#ff4d8d;--text:#e8edf8;--text2:#a8b4cc;--text3:#5a6480;--mono:'JetBrains Mono',monospace;--display:'Syne',sans-serif;--accent:var(--green);}
+    *{margin:0;padding:0;box-sizing:border-box;}html{scroll-behavior:smooth;}
+    body{font-family:var(--display);background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;}
+    body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse 70% 60% at 15% 30%,rgba(0,255,179,0.06) 0%,transparent 60%),radial-gradient(ellipse 50% 40% at 85% 80%,rgba(0,240,255,0.04) 0%,transparent 60%);}
+    nav{position:fixed;top:0;left:0;right:0;z-index:100;height:56px;display:flex;align-items:stretch;padding:0 48px;background:rgba(3,5,10,0.9);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);}
+    .nav-brand{font-family:var(--mono);font-size:0.72rem;font-weight:600;color:var(--cyan);display:flex;align-items:center;gap:8px;padding-right:28px;border-right:1px solid var(--border);margin-right:8px;text-decoration:none;letter-spacing:0.05em;white-space:nowrap;}
+    .dot{width:6px;height:6px;border-radius:50%;background:var(--cyan);animation:blink 1.4s ease-in-out infinite;box-shadow:0 0 8px var(--cyan);}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:0.1}}
+    .nav-link{font-family:var(--mono);font-size:0.65rem;color:var(--text3);text-decoration:none;display:flex;align-items:center;padding:0 14px;transition:color 0.2s;letter-spacing:0.08em;border-bottom:2px solid transparent;white-space:nowrap;}
+    .nav-link:hover{color:var(--text);}.nav-link.active{color:var(--accent);border-bottom-color:var(--accent);}
+    .hero{position:relative;z-index:1;padding:140px 80px 80px;border-bottom:1px solid var(--border);}
+    .hero-eyebrow{font-family:var(--mono);font-size:0.65rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent);margin-bottom:24px;display:flex;align-items:center;gap:12px;}
+    .hero-eyebrow::before{content:'';width:32px;height:1px;background:var(--accent);}
+    .hero h1{font-size:clamp(3.5rem,9vw,7rem);font-weight:800;line-height:0.92;letter-spacing:-0.04em;margin-bottom:32px;}
+    .hero h1 em{font-style:normal;display:block;-webkit-text-stroke:1.5px var(--accent);color:transparent;}
+    .hero-sub{font-family:var(--mono);font-size:0.85rem;color:var(--text2);max-width:500px;line-height:1.9;font-weight:300;}
+    .stat-row{display:flex;border:1px solid var(--border);border-radius:4px;overflow:hidden;margin-top:56px;}
+    .stat-box{flex:1;padding:28px 32px;border-right:1px solid var(--border);}
+    .stat-box:last-child{border-right:none;}
+    .stat-num{font-size:2.4rem;font-weight:800;letter-spacing:-0.03em;color:var(--accent);margin-bottom:6px;line-height:1;}
+    .stat-lbl{font-family:var(--mono);font-size:0.62rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.12em;}
+    main{position:relative;z-index:1;max-width:1080px;margin:0 auto;padding:80px;display:flex;flex-direction:column;gap:96px;}
+    .section-eyebrow{font-family:var(--mono);font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--text3);margin-bottom:16px;display:flex;align-items:center;gap:12px;}
+    .section-eyebrow::after{content:'';flex:1;height:1px;background:var(--border);}
+    .section-title{font-size:2rem;font-weight:800;letter-spacing:-0.03em;margin-bottom:40px;}
+    .steps{display:flex;flex-direction:column;gap:2px;}
+    .step{display:grid;grid-template-columns:64px 1fr;background:var(--surface);border:1px solid var(--border);cursor:pointer;transition:border-color 0.2s;border-radius:2px;overflow:hidden;}
+    .step:hover{border-color:var(--border2);}.step.open{border-color:var(--accent);}
+    .step-num{padding:24px 0;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:26px;border-right:1px solid var(--border);}
+    .step-num span{font-family:var(--mono);font-size:0.58rem;color:var(--text3);letter-spacing:0.08em;writing-mode:vertical-rl;}
+    .step-num strong{font-size:1.6rem;font-weight:300;color:var(--accent);opacity:0.25;font-family:var(--display);line-height:1;margin-bottom:8px;transition:opacity 0.2s;}
+    .step.open .step-num strong,.step:hover .step-num strong{opacity:0.9;}
+    .step-main{padding:22px 24px;}
+    .step-header{display:flex;justify-content:space-between;align-items:center;}
+    .step-title{font-size:0.95rem;font-weight:700;margin-bottom:3px;}
+    .step-sub{font-family:var(--mono);font-size:0.65rem;color:var(--text3);}
+    .step-chevron{font-family:var(--mono);font-size:0.6rem;color:var(--text3);transition:transform 0.3s,color 0.2s;}
+    .step.open .step-chevron{transform:rotate(180deg);color:var(--accent);}
+    .step-body{max-height:0;overflow:hidden;transition:max-height 0.4s cubic-bezier(0.4,0,0.2,1);}
+    .step.open .step-body{max-height:500px;}
+    .step-detail{padding:16px 0 4px;color:var(--text2);font-family:var(--mono);font-size:0.78rem;line-height:1.9;font-weight:300;border-top:1px solid var(--border);margin-top:14px;}
+    .step-detail strong{color:var(--text);font-weight:600;}
+    .step-detail code{color:var(--accent);background:rgba(0,255,179,0.07);padding:1px 5px;border-radius:2px;font-size:0.74rem;}
+    .step-detail pre{background:#050810;border:1px solid var(--border);border-left:2px solid var(--accent);padding:14px;border-radius:2px;margin-top:12px;font-size:0.7rem;line-height:1.8;overflow-x:auto;color:var(--text2);}
+    .step-detail pre .k{color:var(--accent);}.step-detail pre .c{color:var(--text3);font-style:italic;}
+
+    /* COMPARISON TABLE */
+    .compare-table{width:100%;border-collapse:collapse;border:1px solid var(--border);border-radius:4px;overflow:hidden;}
+    .compare-table th{font-family:var(--mono);font-size:0.62rem;letter-spacing:0.12em;text-transform:uppercase;padding:16px 20px;text-align:left;background:var(--surface2);border-bottom:1px solid var(--border);}
+    .compare-table th:first-child{color:var(--text3);}
+    .compare-table td{font-family:var(--mono);font-size:0.76rem;padding:14px 20px;border-bottom:1px solid var(--border);color:var(--text2);vertical-align:top;}
+    .compare-table tr:last-child td{border-bottom:none;}
+    .compare-table tr:hover td{background:var(--surface);}
+    .tag{display:inline-block;font-family:var(--mono);font-size:0.65rem;padding:2px 7px;border-radius:2px;font-weight:600;}
+    .tag-orange{background:rgba(255,140,66,0.12);color:var(--orange);}
+    .tag-green{background:rgba(0,255,179,0.1);color:var(--green);}
+    .tag-cyan{background:rgba(0,240,255,0.1);color:var(--cyan);}
+    .tag-yes{background:rgba(0,255,179,0.1);color:var(--green);}
+    .tag-no{background:rgba(255,77,141,0.1);color:var(--pink);}
+
+    .page-nav{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+    .page-link{display:flex;justify-content:space-between;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:24px 28px;text-decoration:none;transition:border-color 0.25s,background 0.2s;}
+    .page-link:hover{border-color:var(--border2);background:var(--surface2);}
+    .page-link-lbl{font-family:var(--mono);font-size:0.58rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px;}
+    .page-link-name{font-size:1.2rem;font-weight:800;color:var(--text);}
+    .page-link-arr{font-family:var(--mono);color:var(--text3);font-size:1rem;}
+    footer{position:relative;z-index:1;padding:32px 80px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;}
+    .foot-text{font-family:var(--mono);font-size:0.6rem;color:var(--text3);letter-spacing:0.08em;}
+    .foot-links{display:flex;gap:24px;}
+    .foot-links a{font-family:var(--mono);font-size:0.6rem;color:var(--text3);text-decoration:none;letter-spacing:0.06em;transition:color 0.2s;}
+    .foot-links a:hover{color:var(--text);}
+    .reveal{opacity:0;transform:translateY(20px);transition:opacity 0.6s ease,transform 0.6s ease;}
+    .reveal.visible{opacity:1;transform:translateY(0);}
+    @media(max-width:900px){nav{padding:0 20px;}.hero{padding:110px 24px 56px;}main{padding:48px 24px;gap:64px;}footer{padding:24px;}.page-nav{grid-template-columns:1fr;}.stat-row{flex-direction:column;}}
+  </style>
+</head>
+<body>
+<nav>
+  <a class="nav-brand" href="index.html"><span class="dot"></span>STREAMING / PIPELINE</a>
+  <a class="nav-link" href="index.html">HOME</a>
+  <a class="nav-link" href="abr.html">ABR</a>
+  <a class="nav-link" href="hls.html">HLS</a>
+  <a class="nav-link active" href="dash.html">DASH</a>
+  <a class="nav-link" href="cmaf.html">CMAF</a>
+  <a class="nav-link" href="demo.html">DEMO</a>
+</nav>
+
+<div class="hero">
+  <div class="hero-eyebrow">PROTOCOL_02 · DYNAMIC ADAPTIVE STREAMING OVER HTTP</div>
+  <h1>The open<em>standard.</em></h1>
+  <p class="hero-sub">The ISO/IEC standard for adaptive bitrate streaming, developed in 2011. Codec-agnostic, platform-neutral, and the protocol of choice for Android, Chrome, and most non-Apple platforms. YouTube runs on DASH.</p>
+  <div class="stat-row">
+    <div class="stat-box"><div class="stat-num">2011</div><div class="stat-lbl">ISO/IEC 23009-1</div></div>
+    <div class="stat-box"><div class="stat-num">.mpd</div><div class="stat-lbl">Manifest format</div></div>
+    <div class="stat-box"><div class="stat-num">AV1</div><div class="stat-lbl">Codec support</div></div>
+    <div class="stat-box"><div class="stat-num">Widevine</div><div class="stat-lbl">Primary DRM</div></div>
+  </div>
+</div>
+
+<main>
+  <section class="reveal">
+    <div class="section-eyebrow">01 · THE PIPELINE</div>
+    <div class="section-title">How DASH works</div>
+    <div class="steps" id="steps"></div>
+  </section>
+
+  <section class="reveal">
+    <div class="section-eyebrow">02 · PROTOCOL COMPARISON</div>
+    <div class="section-title">HLS vs DASH vs CMAF</div>
+    <table class="compare-table">
+      <thead>
+        <tr>
+          <th>Feature</th>
+          <th style="color:var(--orange)">HLS</th>
+          <th style="color:var(--green)">DASH</th>
+          <th style="color:var(--cyan)">CMAF</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Manifest format</td><td><span class="tag tag-orange">.m3u8</span></td><td><span class="tag tag-green">.mpd</span></td><td><span class="tag tag-cyan">Both</span></td></tr>
+        <tr><td>Segment container</td><td><span class="tag tag-orange">.ts / .fmp4</span></td><td><span class="tag tag-green">.fmp4</span></td><td><span class="tag tag-cyan">.fmp4 (unified)</span></td></tr>
+        <tr><td>Typical latency</td><td>6–30s (LL: &lt;3s)</td><td>2–10s (LL: &lt;3s)</td><td>&lt;2s chunked</td></tr>
+        <tr><td>Native iOS / Safari</td><td><span class="tag tag-yes">✓ Yes</span></td><td><span class="tag tag-no">✗ No</span></td><td><span class="tag tag-yes">✓ Yes (via HLS)</span></td></tr>
+        <tr><td>Codec support</td><td>H.264, H.265</td><td>H.264, H.265, VP9, AV1</td><td>H.264, H.265, VP9, AV1</td></tr>
+        <tr><td>Primary DRM</td><td>FairPlay</td><td>Widevine, PlayReady</td><td>CENC (multi-DRM)</td></tr>
+        <tr><td>Standardized by</td><td>Apple / IETF</td><td>MPEG / ISO</td><td>MPEG / ISO</td></tr>
+        <tr><td>Encode once?</td><td><span class="tag tag-no">✗ No</span></td><td><span class="tag tag-no">✗ No</span></td><td><span class="tag tag-yes">✓ Yes</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="reveal">
+    <div class="section-eyebrow">03 · CONTINUE</div>
+    <div class="section-title">Keep exploring</div>
+    <div class="page-nav">
+      <a class="page-link" href="hls.html"><div><div class="page-link-lbl">Previous protocol</div><div class="page-link-name">HLS</div></div><span class="page-link-arr">←</span></a>
+      <a class="page-link" href="cmaf.html"><div><div class="page-link-lbl">The unifier</div><div class="page-link-name">CMAF</div></div><span class="page-link-arr">→</span></a>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="foot-text">STREAMING PIPELINE · AWS S3 + CLOUDFRONT + MEDIACONVERT</div>
+  <div class="foot-links"><a href="index.html">DEMO</a><a href="abr.html">ABR</a><a href="hls.html">HLS</a><a href="cmaf.html">CMAF</a></div>
+</footer>
+
+<script>
+const observer=new IntersectionObserver(entries=>entries.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible');}),{threshold:0.08});
+document.querySelectorAll('.reveal').forEach(el=>observer.observe(el));
+const steps=[
+  {n:'01',title:'Video source',sub:'Raw input fed to the DASH packager',detail:`Same as HLS — the pipeline starts with a <strong>raw video source</strong>. For DASH, the source is fed to a packager that understands the DASH specification. Tools like <code>Shaka Packager</code>, <code>AWS MediaPackage</code>, or <code>ffmpeg</code> with DASH output handle this.`},
+  {n:'02',title:'Multi-bitrate encoding',sub:'Codec-flexible transcoding at multiple quality levels',detail:`DASH encodes the source into <strong>multiple representations</strong> — DASH's term for renditions. Because DASH is codec-agnostic, you can encode in H.264 for broad compatibility, VP9 for better compression on Chrome, or AV1 for maximum efficiency on modern browsers.`},
+  {n:'03',title:'Segmentation into fMP4',sub:'Fragmented MP4 — the native DASH container',detail:`DASH uses <strong>fragmented MP4 (.fmp4)</strong> as its native segment container. Unlike original HLS which used .ts files, fMP4 is modern, browser-native, and more efficient. This is also the format CMAF standardizes on, enabling the same segments to serve both protocols.`},
+  {n:'04',title:'MPD manifest',sub:'XML-based Media Presentation Description',detail:`The <strong>MPD</strong> is DASH's manifest — an XML file describing the entire presentation, defining periods, adaptation sets, representations, and segment templates.
+<pre><span class="c">&lt;?xml version="1.0"?&gt;</span>
+<span class="k">&lt;MPD</span> type="static" mediaPresentationDuration="PT1M12S"<span class="k">&gt;</span>
+  <span class="k">&lt;AdaptationSet</span> mimeType="video/mp4"<span class="k">&gt;</span>
+    <span class="k">&lt;Representation</span> bandwidth="5000000" width="1920" height="1080"<span class="k">/&gt;</span>
+    <span class="k">&lt;Representation</span> bandwidth="800000" width="640" height="360"<span class="k">/&gt;</span>
+  <span class="k">&lt;/AdaptationSet&gt;</span>
+<span class="k">&lt;/MPD&gt;</span></pre>`},
+  {n:'05',title:'CDN delivery',sub:'Segments cached at global edge nodes',detail:`DASH segments and the MPD manifest are distributed via CDN exactly like HLS. Because DASH uses fMP4, the same segment files can be referenced by both a DASH MPD and an HLS m3u8 when using CMAF — one CDN store, both protocols.`},
+  {n:'06',title:'DASH player',sub:'ABR quality selection on Android and Chrome',detail:`In the browser, <code>Shaka Player</code> or <code>dash.js</code> parse the MPD and run the ABR loop. On Android, <strong>ExoPlayer</strong> handles DASH natively and powers most Android streaming apps including YouTube.`},
+];
+const container=document.getElementById('steps');
+steps.forEach(s=>{
+  const el=document.createElement('div');el.className='step';
+  el.innerHTML=`<div class="step-num"><strong>${s.n}</strong><span>STEP</span></div><div class="step-main"><div class="step-header"><div><div class="step-title">${s.title}</div><div class="step-sub">${s.sub}</div></div><div class="step-chevron">▼</div></div><div class="step-body"><div class="step-detail">${s.detail}</div></div></div>`;
+  el.addEventListener('click',()=>{const o=el.classList.contains('open');document.querySelectorAll('.step').forEach(s=>s.classList.remove('open'));if(!o)el.classList.add('open');});
+  container.appendChild(el);
+});
+</script>
+</body>
+</html>

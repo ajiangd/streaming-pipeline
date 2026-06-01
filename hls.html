@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HLS — How Apple's HTTP Live Streaming Works</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%2300f0ff'/><circle cx='50' cy='50' r='20' fill='%2303050a'/></svg>">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:#03050a; --surface:#080c16; --surface2:#0d1220;
+      --border:#151d30; --border2:#1e2840;
+      --cyan:#00f0ff; --violet:#9d6fff; --green:#00ffb3;
+      --orange:#ff8c42; --pink:#ff4d8d;
+      --text:#e8edf8; --text2:#a8b4cc; --text3:#5a6480;
+      --mono:'JetBrains Mono',monospace; --display:'Syne',sans-serif;
+      --accent:var(--orange);
+    }
+    *{margin:0;padding:0;box-sizing:border-box;} html{scroll-behavior:smooth;}
+    body{font-family:var(--display);background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;}
+    body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+      background:radial-gradient(ellipse 70% 50% at 80% 10%,rgba(255,140,66,0.07) 0%,transparent 60%),
+                 radial-gradient(ellipse 50% 40% at 10% 90%,rgba(255,77,141,0.04) 0%,transparent 60%);}
+    nav{position:fixed;top:0;left:0;right:0;z-index:100;height:56px;display:flex;align-items:stretch;padding:0 48px;background:rgba(3,5,10,0.9);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);}
+    .nav-brand{font-family:var(--mono);font-size:0.72rem;font-weight:600;color:var(--cyan);display:flex;align-items:center;gap:8px;padding-right:28px;border-right:1px solid var(--border);margin-right:8px;text-decoration:none;letter-spacing:0.05em;white-space:nowrap;}
+    .dot{width:6px;height:6px;border-radius:50%;background:var(--cyan);animation:blink 1.4s ease-in-out infinite;box-shadow:0 0 8px var(--cyan);}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:0.1}}
+    .nav-link{font-family:var(--mono);font-size:0.65rem;color:var(--text3);text-decoration:none;display:flex;align-items:center;padding:0 14px;transition:color 0.2s;letter-spacing:0.08em;border-bottom:2px solid transparent;white-space:nowrap;}
+    .nav-link:hover{color:var(--text);}
+    .nav-link.active{color:var(--accent);border-bottom-color:var(--accent);}
+    .hero{position:relative;z-index:1;padding:140px 80px 80px;border-bottom:1px solid var(--border);}
+    .hero-eyebrow{font-family:var(--mono);font-size:0.65rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent);margin-bottom:24px;display:flex;align-items:center;gap:12px;}
+    .hero-eyebrow::before{content:'';width:32px;height:1px;background:var(--accent);}
+    .hero h1{font-size:clamp(3.5rem,9vw,7rem);font-weight:800;line-height:0.92;letter-spacing:-0.04em;margin-bottom:32px;}
+    .hero h1 em{font-style:normal;display:block;-webkit-text-stroke:1.5px var(--accent);color:transparent;}
+    .hero-sub{font-family:var(--mono);font-size:0.85rem;color:var(--text2);max-width:500px;line-height:1.9;font-weight:300;}
+    .stat-row{display:flex;gap:0;border:1px solid var(--border);border-radius:4px;overflow:hidden;margin-top:56px;}
+    .stat-box{flex:1;padding:28px 32px;border-right:1px solid var(--border);}
+    .stat-box:last-child{border-right:none;}
+    .stat-num{font-size:2.4rem;font-weight:800;letter-spacing:-0.03em;color:var(--accent);margin-bottom:6px;line-height:1;}
+    .stat-lbl{font-family:var(--mono);font-size:0.62rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.12em;}
+    main{position:relative;z-index:1;max-width:1080px;margin:0 auto;padding:80px;display:flex;flex-direction:column;gap:96px;}
+    .section-eyebrow{font-family:var(--mono);font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--text3);margin-bottom:16px;display:flex;align-items:center;gap:12px;}
+    .section-eyebrow::after{content:'';flex:1;height:1px;background:var(--border);}
+    .section-title{font-size:2rem;font-weight:800;letter-spacing:-0.03em;margin-bottom:40px;}
+
+    /* STEPS */
+    .steps{display:flex;flex-direction:column;gap:2px;}
+    .step{display:grid;grid-template-columns:64px 1fr;background:var(--surface);border:1px solid var(--border);cursor:pointer;transition:border-color 0.2s;border-radius:2px;overflow:hidden;}
+    .step:hover{border-color:var(--border2);}
+    .step.open{border-color:var(--accent);}
+    .step-num{padding:24px 0;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:26px;border-right:1px solid var(--border);}
+    .step-num span{font-family:var(--mono);font-size:0.58rem;color:var(--text3);letter-spacing:0.08em;writing-mode:vertical-rl;}
+    .step-num strong{font-size:1.6rem;font-weight:300;color:var(--accent);opacity:0.25;font-family:var(--display);line-height:1;margin-bottom:8px;transition:opacity 0.2s;}
+    .step.open .step-num strong,.step:hover .step-num strong{opacity:0.9;}
+    .step-main{padding:22px 24px;}
+    .step-header{display:flex;justify-content:space-between;align-items:center;}
+    .step-title{font-size:0.95rem;font-weight:700;margin-bottom:3px;}
+    .step-sub{font-family:var(--mono);font-size:0.65rem;color:var(--text3);}
+    .step-chevron{font-family:var(--mono);font-size:0.6rem;color:var(--text3);transition:transform 0.3s,color 0.2s;}
+    .step.open .step-chevron{transform:rotate(180deg);color:var(--accent);}
+    .step-body{max-height:0;overflow:hidden;transition:max-height 0.4s cubic-bezier(0.4,0,0.2,1);}
+    .step.open .step-body{max-height:500px;}
+    .step-detail{padding:16px 0 4px;color:var(--text2);font-family:var(--mono);font-size:0.78rem;line-height:1.9;font-weight:300;border-top:1px solid var(--border);margin-top:14px;}
+    .step-detail strong{color:var(--text);font-weight:600;}
+    .step-detail code{color:var(--accent);background:rgba(255,140,66,0.08);padding:1px 5px;border-radius:2px;font-size:0.74rem;}
+    .step-detail pre{background:#050810;border:1px solid var(--border);border-left:2px solid var(--accent);padding:14px;border-radius:2px;margin-top:12px;font-size:0.7rem;line-height:1.8;overflow-x:auto;color:var(--text2);}
+    .step-detail pre .k{color:var(--accent);}
+    .step-detail pre .c{color:var(--text3);font-style:italic;}
+
+    /* FACTS */
+    .fact-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px;background:var(--border);border:1px solid var(--border);border-radius:4px;overflow:hidden;}
+    .fact-card{background:var(--surface);padding:28px;transition:background 0.2s;}
+    .fact-card:hover{background:var(--surface2);}
+    .fact-label{font-family:var(--mono);font-size:0.58rem;color:var(--accent);text-transform:uppercase;letter-spacing:0.14em;margin-bottom:10px;}
+    .fact-card p{font-family:var(--mono);font-size:0.76rem;color:var(--text2);line-height:1.85;font-weight:300;}
+    .fact-card p strong{color:var(--text);font-weight:600;}
+
+    /* NAV LINKS */
+    .page-nav{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+    .page-link{display:flex;justify-content:space-between;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:24px 28px;text-decoration:none;transition:border-color 0.25s,background 0.2s;}
+    .page-link:hover{border-color:var(--border2);background:var(--surface2);}
+    .page-link-lbl{font-family:var(--mono);font-size:0.58rem;color:var(--text3);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px;}
+    .page-link-name{font-size:1.2rem;font-weight:800;color:var(--text);}
+    .page-link-arr{font-family:var(--mono);color:var(--text3);font-size:1rem;}
+
+    footer{position:relative;z-index:1;padding:32px 80px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;}
+    .foot-text{font-family:var(--mono);font-size:0.6rem;color:var(--text3);letter-spacing:0.08em;}
+    .foot-links{display:flex;gap:24px;}
+    .foot-links a{font-family:var(--mono);font-size:0.6rem;color:var(--text3);text-decoration:none;letter-spacing:0.06em;transition:color 0.2s;}
+    .foot-links a:hover{color:var(--text);}
+    .reveal{opacity:0;transform:translateY(20px);transition:opacity 0.6s ease,transform 0.6s ease;}
+    .reveal.visible{opacity:1;transform:translateY(0);}
+    @media(max-width:900px){nav{padding:0 20px;}.hero{padding:110px 24px 56px;}main{padding:48px 24px;gap:64px;}footer{padding:24px;}.fact-grid{grid-template-columns:1fr;}.page-nav{grid-template-columns:1fr;}.stat-row{flex-direction:column;}}
+  </style>
+</head>
+<body>
+<nav>
+  <a class="nav-brand" href="index.html"><span class="dot"></span>STREAMING / PIPELINE</a>
+  <a class="nav-link" href="index.html">HOME</a>
+  <a class="nav-link" href="abr.html">ABR</a>
+  <a class="nav-link active" href="hls.html">HLS</a>
+  <a class="nav-link" href="dash.html">DASH</a>
+  <a class="nav-link" href="cmaf.html">CMAF</a>
+  <a class="nav-link" href="demo.html">DEMO</a>
+</nav>
+
+<div class="hero">
+  <div class="hero-eyebrow">PROTOCOL_01 · HTTP LIVE STREAMING</div>
+  <h1>Apple's protocol.<em>Everywhere.</em></h1>
+  <p class="hero-sub">Developed by Apple in 2009, HLS is the dominant streaming protocol for iOS, macOS Safari, and Apple TV — and the only protocol that works natively on those platforms. It powers billions of streams daily.</p>
+  <div class="stat-row">
+    <div class="stat-box"><div class="stat-num">2009</div><div class="stat-lbl">Released by Apple</div></div>
+    <div class="stat-box"><div class="stat-num">.m3u8</div><div class="stat-lbl">Playlist format</div></div>
+    <div class="stat-box"><div class="stat-num">H.264</div><div class="stat-lbl">Primary codec</div></div>
+    <div class="stat-box"><div class="stat-num">&lt;3s</div><div class="stat-lbl">LL-HLS latency</div></div>
+  </div>
+</div>
+
+<main>
+  <section class="reveal">
+    <div class="section-eyebrow">01 · THE PIPELINE</div>
+    <div class="section-title">How HLS works</div>
+    <div class="steps" id="steps"></div>
+  </section>
+
+  <section class="reveal">
+    <div class="section-eyebrow">02 · KEY FACTS</div>
+    <div class="section-title">What makes HLS distinctive</div>
+    <div class="fact-grid">
+      <div class="fact-card">
+        <div class="fact-label">Platform support</div>
+        <p>HLS is <strong>required on Safari and iOS</strong> — Apple does not support DASH natively. Any streaming service targeting Apple devices must support HLS. It's also supported on Android, smart TVs, and Roku, making it effectively universal.</p>
+      </div>
+      <div class="fact-card">
+        <div class="fact-label">Segment containers</div>
+        <p>Originally HLS used <strong>MPEG-2 Transport Stream (.ts)</strong> — a 1990s broadcast format. Modern HLS supports fragmented MP4 (.fmp4), which is more efficient and enables full CMAF compatibility with DASH.</p>
+      </div>
+      <div class="fact-card">
+        <div class="fact-label">Low-Latency HLS (LL-HLS)</div>
+        <p>Apple introduced LL-HLS in 2019 to bring live latency under 3 seconds. It uses <strong>partial segments and preload hints</strong> — the player starts downloading a segment before it's fully encoded, staying just seconds behind live.</p>
+      </div>
+      <div class="fact-card">
+        <div class="fact-label">DRM: FairPlay</div>
+        <p>Apple's DRM system for HLS is <strong>FairPlay Streaming</strong> — only decryptable on Apple devices. CMAF's Common Encryption (CENC) allows FairPlay and Widevine to coexist in one encrypted file, solving the dual-DRM problem.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="reveal">
+    <div class="section-eyebrow">03 · CONTINUE</div>
+    <div class="section-title">Keep exploring</div>
+    <div class="page-nav">
+      <a class="page-link" href="abr.html"><div><div class="page-link-lbl">Back to concept</div><div class="page-link-name">ABR</div></div><span class="page-link-arr">←</span></a>
+      <a class="page-link" href="dash.html"><div><div class="page-link-lbl">Next protocol</div><div class="page-link-name">DASH</div></div><span class="page-link-arr">→</span></a>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="foot-text">STREAMING PIPELINE · AWS S3 + CLOUDFRONT + MEDIACONVERT</div>
+  <div class="foot-links"><a href="index.html">DEMO</a><a href="abr.html">ABR</a><a href="dash.html">DASH</a><a href="cmaf.html">CMAF</a></div>
+</footer>
+
+<script>
+const observer=new IntersectionObserver(entries=>entries.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible');}),{threshold:0.08});
+document.querySelectorAll('.reveal').forEach(el=>observer.observe(el));
+const steps=[
+  {n:'01',title:'Video source',sub:'Raw input: file, camera, or live encoder',detail:`The pipeline starts with a <strong>raw video source</strong>. For live streaming this is typically a hardware or software encoder pushing RTMP or SRT. For VOD it's a source file — often a high-bitrate H.264 or ProRes master handed to the transcoder.`},
+  {n:'02',title:'HLS packager',sub:'Encoding multiple renditions and generating segments',detail:`An HLS packager like <code>AWS MediaConvert</code> or <code>FFmpeg</code> takes the source and outputs multiple renditions at different bitrates. Each rendition is sliced into segments — typically 6 seconds. The packager also generates the playlist files.`},
+  {n:'03',title:'Master playlist (.m3u8)',sub:'The index of all available renditions',detail:`The <strong>master playlist</strong> is a plain-text file listing every rendition and its properties. The player reads this first to understand what's available.
+<pre><span class="c">#EXTM3U</span>
+<span class="k">#EXT-X-STREAM-INF</span>:BANDWIDTH=5000000,RESOLUTION=1920x1080
+hummingbirds_1080p.m3u8
+<span class="k">#EXT-X-STREAM-INF</span>:BANDWIDTH=2500000,RESOLUTION=1280x720
+hummingbirds_720p.m3u8
+<span class="k">#EXT-X-STREAM-INF</span>:BANDWIDTH=800000,RESOLUTION=640x360
+hummingbirds_360p.m3u8</pre>`},
+  {n:'04',title:'Rendition playlists',sub:'Per-quality segment indexes',detail:`Each rendition has its own <strong>media playlist</strong> — a .m3u8 file listing actual segment files in order. The player picks a rendition based on bandwidth, then follows its playlist to fetch segments sequentially.
+<pre><span class="c">#EXTM3U</span>
+<span class="k">#EXT-X-TARGETDURATION</span>:7
+<span class="k">#EXT-X-VERSION</span>:3
+<span class="k">#EXTINF</span>:6.006,
+hummingbirds_1080p_00001.ts
+<span class="k">#EXTINF</span>:6.006,
+hummingbirds_1080p_00002.ts</pre>`},
+  {n:'05',title:'CDN edge delivery',sub:'Segments cached globally at edge nodes',detail:`All playlist files and segments are stored on an <strong>origin server</strong> (like S3) and cached by a CDN (like CloudFront). The player requests segments from the nearest edge node — often within milliseconds. For popular content, the origin may never serve the same segment twice.`},
+  {n:'06',title:'HLS.js ABR loop',sub:'Continuous quality adaptation in the browser',detail:`In the browser, <code>HLS.js</code> implements the full HLS stack. It fetches the master playlist, selects a starting rendition based on initial bandwidth, then continuously monitors network speed and buffer health. Every segment request is an opportunity to switch quality. Watch this live on the Demo page.`},
+];
+const container=document.getElementById('steps');
+steps.forEach(s=>{
+  const el=document.createElement('div'); el.className='step';
+  el.innerHTML=`<div class="step-num"><strong>${s.n}</strong><span>STEP</span></div><div class="step-main"><div class="step-header"><div><div class="step-title">${s.title}</div><div class="step-sub">${s.sub}</div></div><div class="step-chevron">▼</div></div><div class="step-body"><div class="step-detail">${s.detail}</div></div></div>`;
+  el.addEventListener('click',()=>{const o=el.classList.contains('open');document.querySelectorAll('.step').forEach(s=>s.classList.remove('open'));if(!o)el.classList.add('open');});
+  container.appendChild(el);
+});
+</script>
+</body>
+</html>
