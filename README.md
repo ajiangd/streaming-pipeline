@@ -2,7 +2,7 @@
 
 A fully deployed educational site explaining how adaptive bitrate streaming works — built on real AWS infrastructure as a learning project ahead of a software engineering internship at a streaming platform.
 
-**Live site → [d14tpktysc56ha.cloudfront.net](d14tpktysc56ha.cloudfront.net) **
+**Live site → [d14tpktysc56ha.cloudfront.net](https://d14tpktysc56ha.cloudfront.net) **
 
 ---
 
