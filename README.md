@@ -1,8 +1,8 @@
-# Streaming Pipeline
+# ABR Pipeline
 
 A fully deployed educational site explaining how adaptive bitrate streaming works. It is built on real AWS infrastructure as a learning project ahead of a software engineering internship at a streaming platform.
 
-**Live site → [Streaming Pipeline Explained](https://d14tpktysc56ha.cloudfront.net)**
+**Live site → [ABR Pipeline Site](https://d14tpktysc56ha.cloudfront.net)**
 
 ---
 
